@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Train of Thought - 汽車パズル</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&family=Noto+Sans+JP:wght@700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            overflow: hidden;
+            touch-action: manipulation;
+            background-color: #000;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            background: radial-gradient(circle at 50% 30%, #366042 0%, #1e3c28 60%, #112519 100%);
+            overflow: hidden;
+        }
+
+        /* Grunge/Paper texture */
+        #game-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+            opacity: 0.6;
+            pointer-events: none;
+            z-index: 1;
+            mix-blend-mode: overlay;
+        }
+
+        /* Vignette */
+        #game-container::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.6) 100%);
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            z-index: 100;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .hud-group {
+            display: flex;
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(2px);
+            border-radius: 2px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .hud-item {
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #2a3d30;
+            font-size: 14px;
+            border-right: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .hud-item:last-child {
+            border-right: none;
+        }
+
+        .hud-label {
+            font-weight: 800;
+            opacity: 0.6;
+            letter-spacing: 0.5px;
+            font-size: 12px;
+        }
+
+        .hud-value {
+            font-weight: 800;
+            font-size: 16px;
+            color: #1a2e22;
+        }
+
+        #pause-btn {
+            position: absolute;
+            top: 15px;
+            left: 20px;
+            width: 36px;
+            height: 36px;
+            background: #0f241a;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 101;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        #pause-btn .pause-icon {
+            display: flex;
+            gap: 5px;
+        }
+
+        #pause-btn .pause-icon span {
+            width: 4px;
+            height: 14px;
+            background: #4ade80;
+            border-radius: 1px;
+        }
+
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        /* Overlays */
+        .overlay-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(18, 33, 23, 0.92);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            color: white;
+            opacity: 1;
+            transition: opacity 0.3s;
+        }
+
+        .overlay-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 42px;
+            color: #4ade80;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 10px rgba(74, 222, 128, 0.3);
+        }
+
+        p {
+            font-family: 'Noto Sans JP', sans-serif;
+            margin-bottom: 40px;
+            color: rgba(255,255,255,0.7);
+            line-height: 1.8;
+            text-align: center;
+        }
+
+        .game-btn {
+            padding: 16px 48px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 18px;
+            font-weight: 800;
+            background: #4ade80;
+            color: #0f241a;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+            box-shadow: 0 4px 0 #22c55e;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .game-btn:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <button id="pause-btn">
+            <div class="pause-icon">
+                <span></span>
+                <span></span>
+            </div>
+        </button>
+
+        <div id="hud">
+            <div class="hud-group">
+                <div class="hud-item">
+                    <span class="hud-label">TIME</span>
+                    <span class="hud-value" id="timer">0:14</span>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">CORRECT</span>
+                    <span class="hud-value" id="score-text">14 of 16</span>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="game-canvas"></canvas>
+
+        <div id="start-screen" class="overlay-screen">
+            <h1>TRAIN PUZZLE</h1>
+            <p>分岐点をタップして線路を切り替え<br>汽車を同じ色の倉庫に導こう</p>
+            <button class="game-btn" id="start-btn">START GAME</button>
+        </div>
+
+        <div id="game-over-screen" class="overlay-screen hidden">
+            <h1>GAME OVER</h1>
+            <p style="font-size: 24px; color: #fbbf24; font-weight: bold;" id="final-score">0</p>
+            <button class="game-btn" id="restart-btn">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            GAME_DURATION: 60,
+            TRAIN_SPEED: 1.2,          // 遅くして見やすく
+            SPAWN_INTERVAL: 1800,      // より頻繁にスポーン
+            COLORS: {
+                green: '#2eac48',  
+                blue: '#4ab9f7',
+                pink: '#f03e75',
+                yellow: '#fccb00',
+                black: '#333333'
+            },
+            TRACK_COLOR: '#1a3324',
+            JUNCTION_RADIUS: 32, // Slightly larger
+            STICKER_WIDTH: 5
+        };
+
+        const state = {
+            isRunning: false,
+            isPaused: false,
+            score: 0,
+            total: 0,
+            timeLeft: CONFIG.GAME_DURATION,
+            trains: [],
+            junctions: [],
+            stations: [],
+            tracks: [],
+            mountains: [],
+            trees: [],
+            animationId: null
+        };
+
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function init() {
+            resize();
+            createWorld();
+            draw();
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if(!state.isRunning) createWorld();
+        }
+
+        window.addEventListener('resize', resize);
+
+        function createWorld() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const scale = Math.min(w/800, h/1000); 
+
+            // Stations
+            state.stations = [
+                { id: 'green', color: 'green', x: w * 0.28, y: h * 0.22, type: 'house' },
+                { id: 'blue', color: 'blue', x: w * 0.28, y: h * 0.36, type: 'silo' },
+                { id: 'pink', color: 'pink', x: w * 0.45, y: h * 0.48, type: 'factory' },
+                { id: 'yellow', color: 'yellow', x: w * 0.72, y: h * 0.45, type: 'barn' },
+                { id: 'black', color: 'black', x: w * 0.28, y: h * 0.75, type: 'dark_factory' }
+            ];
+
+            // Defining Coordinates for Junctions to link them easily
+            const j1 = { x: w * 0.45, y: h * 0.20 };
+            const j2 = { x: w * 0.58, y: h * 0.35 };
+            const j3 = { x: w * 0.55, y: h * 0.55 };
+            const j4 = { x: w * 0.42, y: h * 0.72 };
+            const startPoint = { x: w * 0.7, y: h + 50 }; // Visual start
+            const entryPoint = { x: w * 0.42, y: h * 0.85 }; // Virtual entry point for J4
+
+            // Junctions with Source info for drawing rails inside
+            state.junctions = [
+                { 
+                    id: 1, 
+                    x: j1.x, y: j1.y, 
+                    routes: ['left', 'down'], 
+                    current: 1,
+                    source: j2 // Comes from J2
+                },
+                { 
+                    id: 2, 
+                    x: j2.x, y: j2.y, 
+                    routes: ['up', 'left'], 
+                    current: 0,
+                    source: j3 // Comes from J3
+                },
+                { 
+                    id: 3, 
+                    x: j3.x, y: j3.y, 
+                    routes: ['left', 'down'], 
+                    current: 0,
+                    source: j4 // Comes from J4
+                },
+                { 
+                    id: 4, 
+                    x: j4.x, y: j4.y, 
+                    routes: ['left', 'up'], 
+                    current: 1,
+                    source: entryPoint // Comes from bottom
+                }
+            ];
+
+            // Tracks
+            state.tracks = [
+                // Visual Start Line
+                { from: startPoint, to: {x: w*0.7, y: h*0.75}, type: 'straight' },
+                { from: {x: w*0.7, y: h*0.75}, to: {x: w*0.42, y: h*0.72 + CONFIG.JUNCTION_RADIUS}, type: 'curve_bottom' }, // Connects to J4 bottom
+
+                // J4 (Bottom) Outputs
+                { from: j4, to: state.stations[4], jId: 4, route: 'left' }, // To Black
+                { from: j4, to: j3, jId: 4, route: 'up' },   // To Mid (J3)
+
+                // J3 (Center) Outputs
+                { from: j3, to: state.stations[2], jId: 3, route: 'left' }, // To Pink
+                { from: j3, to: j2, jId: 3, route: 'down' }, // To J2
+
+                // J2 (Right) Outputs
+                { from: j2, to: state.stations[3], jId: 2, route: 'left' }, // To Yellow
+                { from: j2, to: j1, jId: 2, route: 'up' },   // To J1
+
+                // J1 (Top) Outputs
+                { from: j1, to: state.stations[0], jId: 1, route: 'left' }, // To Green
+                { from: j1, to: state.stations[1], jId: 1, route: 'down' }  // To Blue
+            ];
+
+            // Mountains
+            state.mountains = [
+                { x: w * 0.55, y: h, w: w * 0.25, h: 160, color: '#244530' },
+                { x: w * 0.75, y: h, w: w * 0.3, h: 220, color: '#1a3826' },
+                { x: w * 0.90, y: h, w: w * 0.2, h: 140, color: '#2a5038' }
+            ];
+
+            // Trees
+            state.trees = [];
+            for(let i=0; i<12; i++) {
+                state.trees.push({
+                    x: Math.random() * w,
+                    y: Math.random() * h,
+                    s: 0.8 + Math.random() * 0.5
+                });
+            }
+        }
+
+        // --- DRAWING HELPERS ---
+
+        function drawStickerOutline(ctx, drawFn, color) {
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.2)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetY = 3;
+            
+            ctx.lineWidth = CONFIG.STICKER_WIDTH * 2;
+            ctx.strokeStyle = '#fff';
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            drawFn(ctx);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#fff';
+            drawFn(ctx);
+            ctx.fill();
+            
+            ctx.restore();
+
+            ctx.save();
+            ctx.fillStyle = color;
+            drawFn(ctx);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawRailSegment(ctx, p1, p2) {
+            // Ties
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = '#112219'; 
+            ctx.lineWidth = 14; 
+            ctx.setLineDash([4, 10]);
+            ctx.lineCap = 'butt';
+            ctx.stroke();
+            ctx.restore();
+
+            // Rails
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = '#2a4d38';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+            
+            ctx.strokeStyle = '#366042'; 
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawStations() {
+            state.stations.forEach(s => {
+                const color = CONFIG.COLORS[s.color];
+                const drawShape = (ctx) => {
+                    ctx.beginPath();
+                    const x = s.x;
+                    const y = s.y;
+                    if (s.type === 'house') {
+                        ctx.moveTo(x - 25, y + 25);
+                        ctx.lineTo(x + 25, y + 25);
+                        ctx.lineTo(x + 25, y - 10);
+                        ctx.lineTo(x, y - 35);
+                        ctx.lineTo(x - 25, y - 10);
+                        ctx.closePath();
+                        ctx.moveTo(x - 15, y - 20);
+                        ctx.lineTo(x - 15, y - 30);
+                        ctx.lineTo(x - 5, y - 25);
+                        ctx.lineTo(x - 5, y - 15);
+                    } else if (s.type === 'silo') {
+                        ctx.roundRect(x - 30, y - 20, 20, 45, 2);
+                        ctx.arc(x - 20, y - 20, 10, Math.PI, 0);
+                        ctx.rect(x - 5, y - 10, 35, 35);
+                        ctx.moveTo(x - 5, y - 10);
+                        ctx.lineTo(x + 12, y - 25);
+                        ctx.lineTo(x + 30, y - 10);
+                    } else if (s.type === 'factory') {
+                        ctx.roundRect(x - 30, y - 5, 25, 30, 2);
+                        ctx.roundRect(x, y - 15, 30, 40, 2);
+                        ctx.arc(x - 17.5, y - 5, 12.5, Math.PI, 0);
+                        ctx.moveTo(x, y - 15);
+                        ctx.lineTo(x + 15, y - 30);
+                        ctx.lineTo(x + 30, y - 15);
+                    } else if (s.type === 'barn') {
+                        ctx.moveTo(x - 25, y + 25);
+                        ctx.lineTo(x + 25, y + 25);
+                        ctx.lineTo(x + 25, y - 10);
+                        ctx.lineTo(x + 15, y - 25);
+                        ctx.lineTo(x, y - 35);
+                        ctx.lineTo(x - 15, y - 25);
+                        ctx.lineTo(x - 25, y - 10);
+                        ctx.closePath();
+                        ctx.rect(x - 35, y + 5, 15, 20);
+                        ctx.arc(x - 27.5, y + 5, 7.5, Math.PI, 0);
+                    } else if (s.type === 'dark_factory') {
+                        ctx.rect(x - 30, y - 15, 20, 40);
+                        ctx.rect(x - 5, y + 5, 35, 20);
+                        ctx.moveTo(x - 30, y - 15);
+                        ctx.lineTo(x - 20, y - 25);
+                        ctx.lineTo(x - 10, y - 15);
+                        ctx.arc(x - 20, y - 35, 5, 0, Math.PI*2);
+                    }
+                };
+
+                drawStickerOutline(ctx, drawShape, color);
+
+                ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                if (s.type === 'house' || s.type === 'barn') {
+                    ctx.fillRect(s.x - 8, s.y, 6, 8);
+                    ctx.fillRect(s.x + 2, s.y, 6, 8);
+                }
+                
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(s.x, s.y - 45, 10, 0, Math.PI*2);
+                ctx.fill();
+                
+                let icon = '';
+                if(s.type === 'house') icon = '🌿';
+                if(s.type === 'silo') icon = '💧';
+                if(s.type === 'factory') icon = '👑';
+                if(s.type === 'barn') icon = '⭐';
+                if(s.type === 'dark_factory') icon = '●';
+
+                ctx.fillStyle = color;
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(icon, s.x, s.y - 41);
+            });
+        }
+
+        function drawTracks() {
+            state.tracks.forEach(track => {
+                // Calculate start and end points relative to junctions if applicable
+                // We want tracks to stop AT the junction radius
+                let p1 = { ...track.from };
+                let p2 = { ...track.to };
+                
+                // If endpoint is a junction, stop at radius
+                if (track.jId) {
+                    // For tracks originating from a junction (outputs), start at radius
+                    const j = state.junctions.find(j => j.id === track.jId);
+                    if (j) {
+                        const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                        p1.x += Math.cos(angle) * CONFIG.JUNCTION_RADIUS;
+                        p1.y += Math.sin(angle) * CONFIG.JUNCTION_RADIUS;
+                    }
+                }
+                
+                // If target is a junction (input to another junction), stop at radius
+                const targetJ = state.junctions.find(j => 
+                    Math.abs(j.x - p2.x) < 1 && Math.abs(j.y - p2.y) < 1
+                );
+                if (targetJ) {
+                    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                    p2.x -= Math.cos(angle) * CONFIG.JUNCTION_RADIUS;
+                    p2.y -= Math.sin(angle) * CONFIG.JUNCTION_RADIUS;
+                }
+                
+                // If target is a station
+                if (track.to.color) { // It's a station object
+                     const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                     p2.x -= Math.cos(angle) * 30;
+                     p2.y -= Math.sin(angle) * 30;
+                }
+
+                drawRailSegment(ctx, p1, p2);
+            });
+        }
+
+        function drawJunctions() {
+            state.junctions.forEach(j => {
+                // Base
+                ctx.fillStyle = '#5cb87a';
+                ctx.beginPath();
+                ctx.arc(j.x, j.y, CONFIG.JUNCTION_RADIUS, 0, Math.PI*2);
+                ctx.fill();
+                
+                // Ring
+                ctx.strokeStyle = '#86efac';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Draw Rail Inside
+                // 1. Calculate entrance point on circle
+                const inAngle = Math.atan2(j.source.y - j.y, j.source.x - j.x);
+                const pIn = {
+                    x: j.x + Math.cos(inAngle) * CONFIG.JUNCTION_RADIUS,
+                    y: j.y + Math.sin(inAngle) * CONFIG.JUNCTION_RADIUS
+                };
+
+                // 2. Calculate exit point based on current route
+                const routeName = j.routes[j.current];
+                let target = null;
+                
+                // Find target for current route
+                const track = state.tracks.find(t => t.jId === j.id && t.route === routeName);
+                if (track) {
+                    target = track.to;
+                } else {
+                    // Fallback (should not happen if configured correctly)
+                    target = {x: j.x, y: j.y - 50};
+                }
+
+                const outAngle = Math.atan2(target.y - j.y, target.x - j.x);
+                const pOut = {
+                    x: j.x + Math.cos(outAngle) * CONFIG.JUNCTION_RADIUS,
+                    y: j.y + Math.sin(outAngle) * CONFIG.JUNCTION_RADIUS
+                };
+
+                // Draw connecting rail inside junction
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(pIn.x, pIn.y);
+                
+                // Quadratic curve through center? Or just straight if opposite?
+                // Simple quadratic bezier control point at center
+                ctx.quadraticCurveTo(j.x, j.y, pOut.x, pOut.y);
+                
+                // Style - Match track style
+                ctx.strokeStyle = '#112219'; // Ties color
+                ctx.lineWidth = 12;
+                ctx.setLineDash([3, 6]); // Smaller ties
+                ctx.stroke();
+                
+                ctx.setLineDash([]);
+                ctx.strokeStyle = '#2a4d38'; // Rail color
+                ctx.lineWidth = 5;
+                ctx.stroke();
+                
+                ctx.restore();
+
+                // Arrow indicator overlay (optional, but good for clarity)
+                /*
+                ctx.save();
+                ctx.translate(j.x, j.y);
+                ctx.rotate(outAngle);
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.beginPath();
+                ctx.moveTo(10, 0);
+                ctx.lineTo(0, -5);
+                ctx.lineTo(0, 5);
+                ctx.fill();
+                ctx.restore();
+                */
+            });
+        }
+
+        function drawTrains() {
+            state.trains.forEach(t => {
+                const color = CONFIG.COLORS[t.color];
+                const drawTrainShape = (ctx) => {
+                    const len = 40;
+                    const h = 24;
+                    ctx.beginPath();
+                    ctx.roundRect(-len/2, -h/2, len, h, 4);
+                    ctx.rect(-len/2, -h/2 - 8, 14, 8);
+                    ctx.rect(len/2 - 12, -h/2 - 8, 8, 8);
+                    ctx.moveTo(len/2, h/2);
+                    ctx.lineTo(len/2 + 6, h/2);
+                    ctx.lineTo(len/2, 0);
+                };
+
+                ctx.save();
+                ctx.translate(t.x, t.y);
+                ctx.rotate(t.angle);
+                drawStickerOutline(ctx, drawTrainShape, color);
+                ctx.fillStyle = '#222';
+                ctx.beginPath();
+                ctx.arc(-10, 12, 5, 0, Math.PI*2);
+                ctx.arc(10, 12, 5, 0, Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+
+        function drawTrees() {
+            ctx.fillStyle = '#14291f'; 
+            state.trees.forEach(t => {
+                ctx.save();
+                ctx.translate(t.x, t.y);
+                ctx.scale(t.s, t.s);
+                ctx.beginPath();
+                ctx.moveTo(0, -15);
+                ctx.lineTo(-10, 5);
+                ctx.lineTo(10, 5);
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+
+        function drawMountains() {
+            state.mountains.forEach(m => {
+                ctx.fillStyle = m.color;
+                ctx.beginPath();
+                ctx.moveTo(m.x, m.y - m.h);
+                ctx.lineTo(m.x - m.w/2, m.y);
+                ctx.lineTo(m.x + m.w/2, m.y);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                ctx.beginPath();
+                ctx.moveTo(m.x, m.y - m.h);
+                ctx.lineTo(m.x - m.w/6, m.y - m.h + m.h/4);
+                ctx.lineTo(m.x + m.w/6, m.y - m.h + m.h/4);
+                ctx.fill();
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawTrees();
+            drawMountains();
+            drawTracks();
+            drawJunctions();
+            drawStations();
+            drawTrains();
+        }
+
+        // --- LOGIC ---
+        function spawnTrain() {
+            const colors = Object.keys(CONFIG.COLORS);
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const w = canvas.width;
+            const h = canvas.height;
+
+            state.trains.push({
+                x: w * 0.7,
+                y: h + 60,
+                color: color,
+                angle: -Math.PI/2,
+                speed: CONFIG.TRAIN_SPEED,
+                targetX: w * 0.7,
+                targetY: h * 0.75,
+                remove: false
+            });
+            state.total++;
+            updateHUD();
+        }
+
+        function update() {
+            if (!state.isRunning || state.isPaused) return;
+
+            state.trains.forEach(t => {
+                const dx = t.targetX - t.x;
+                const dy = t.targetY - t.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+
+                if (dist < 5) {
+                    findNextTarget(t);
+                } else {
+                    t.x += (dx/dist) * t.speed;
+                    t.y += (dy/dist) * t.speed;
+                    t.angle = Math.atan2(dy, dx);
+                }
+
+                state.stations.forEach(s => {
+                    const d = Math.sqrt((t.x - s.x)**2 + (t.y - s.y)**2);
+                    if(d < 40) handleArrival(t, s);
+                });
+
+                if(t.y < -50 || t.x < -50 || t.x > canvas.width + 50) t.remove = true;
+            });
+
+            state.trains = state.trains.filter(t => !t.remove);
+        }
+
+        function findNextTarget(t) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const j = state.junctions.find(j => Math.abs(t.x - j.x) < 20 && Math.abs(t.y - j.y) < 20);
+            
+            if (j) {
+                const routeName = j.routes[j.current];
+                const track = state.tracks.find(tr => tr.jId === j.id && tr.route === routeName);
+                if (track) {
+                    t.targetX = track.to.x;
+                    t.targetY = track.to.y;
+                }
+            } else if (t.x > w*0.6 && t.y > h*0.7) {
+                t.targetX = w*0.42; t.targetY = h*0.72;
+            }
+        }
+
+        function handleArrival(t, s) {
+            if (t.remove) return;
+            t.remove = true;
+            const success = t.color === s.color;
+            if (success) state.score++;
+            createFeedback(t.x, t.y, success);
+            updateHUD();
+        }
+
+        function createFeedback(x, y, success) {
+            const el = document.createElement('div');
+            el.textContent = success ? '✓' : '✗';
+            el.style.cssText = `position: absolute; left: ${x}px; top: ${y}px; color: ${success ? '#4ade80' : '#f87171'}; font-size: 40px; font-weight: bold; pointer-events: none; z-index: 1000; animation: float-up 0.8s forwards; text-shadow: 0 2px 5px rgba(0,0,0,0.3);`;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 800);
+        }
+
+        function toggleJunction(e) {
+            if(!state.isRunning || state.isPaused) return;
+            const r = canvas.getBoundingClientRect();
+            const x = (e.clientX || e.touches[0].clientX) - r.left;
+            const y = (e.clientY || e.touches[0].clientY) - r.top;
+
+            state.junctions.forEach(j => {
+                if(Math.hypot(j.x - x, j.y - y) < CONFIG.JUNCTION_RADIUS + 15) {
+                    j.current = (j.current + 1) % j.routes.length;
+                }
+            });
+            draw();
+        }
+
+        function updateHUD() {
+            const m = Math.floor(state.timeLeft / 60);
+            const s = state.timeLeft % 60;
+            document.getElementById('timer').textContent = `${m}:${s.toString().padStart(2, '0')}`;
+            document.getElementById('score-text').textContent = `${state.score} of ${state.total}`;
+        }
+
+        function loop() {
+            update();
+            draw();
+            state.animationId = requestAnimationFrame(loop);
+        }
+
+        function startGame() {
+            state.isRunning = true;
+            state.isPaused = false;
+            state.score = 0;
+            state.total = 0;
+            state.timeLeft = CONFIG.GAME_DURATION;
+            state.trains = [];
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('pause-btn').style.display = 'flex';
+            clearInterval(state.timerInterval);
+            clearInterval(state.spawnInterval);
+            state.timerInterval = setInterval(() => {
+                if(!state.isPaused) {
+                    state.timeLeft--;
+                    updateHUD();
+                    if(state.timeLeft <= 0) endGame();
+                }
+            }, 1000);
+            state.spawnInterval = setInterval(() => {
+                if(!state.isPaused && state.trains.length < 12) spawnTrain();
+            }, CONFIG.SPAWN_INTERVAL);
+            spawnTrain();
+            loop();
+        }
+
+        function endGame() {
+            state.isRunning = false;
+            cancelAnimationFrame(state.animationId);
+            clearInterval(state.timerInterval);
+            clearInterval(state.spawnInterval);
+            document.getElementById('final-score').textContent = `SCORE: ${state.score} / ${state.total}`;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        canvas.addEventListener('mousedown', toggleJunction);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); toggleJunction(e); });
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+        document.getElementById('pause-btn').addEventListener('click', () => {
+            if(!state.isRunning) return;
+            state.isPaused = !state.isPaused;
+            document.getElementById('pause-btn').innerHTML = state.isPaused ? 
+                '<div style="width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;border-left:14px solid #4ade80;margin-left:4px"></div>' : 
+                '<div class="pause-icon"><span></span><span></span></div>';
+        });
+
+        init();
+    </script>
+    <style>@keyframes float-up { 0% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -100%) scale(1.5); opacity: 0; } }</style>
+</body>
+</html>
